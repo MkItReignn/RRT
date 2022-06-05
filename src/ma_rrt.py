@@ -20,6 +20,14 @@ class RRT():
     Class for RRT Planning
     """
 
+    '''
+    start - starting coordinates (x, y, radius of cones)
+    planDistance -
+    obstacleList - coordinates of cones
+    expandDis - probably delta?
+    
+    rttTargets are cones that are a certain distance away from the starting point
+    '''
     def __init__(self, start, planDistance, obstacleList, expandDis=0.5, turnAngle=30, maxIter=1000, rrtTargets = None):
 
         self.start = Node(start[0], start[1], start[2])
@@ -37,12 +45,12 @@ class RRT():
         self.rrtTargets = rrtTargets
         # self.end = Node(0, planDistance)
 
-        self.aboveMaxDistance = 0
-        self.belowMaxDistance = 0
-        self.collisionHit = 0
-        self.doubleNodeCount = 0
+        #self.aboveMaxDistance = 0
+        #self.belowMaxDistance = 0
+        #self.collisionHit = 0
+        #self.doubleNodeCount = 0
 
-        self.savedRandoms = []
+        #self.savedRandoms = []
 
     def Planning(self, animation=False, interactive=False):
         self.nodeList = [self.start]
@@ -50,42 +58,53 @@ class RRT():
 
         for i in range(self.maxIter):
             # rnd = self.get_random_point()
-            rnd = self.get_random_point_from_target_list()
+            myRandomPoint = self.get_random_point_from_target_list()
 
-            # print "=====  random: {0},{1}".format(rnd[0], rnd[1]);
+            # print "=====  random: {0},{1}".format(myRandomPoint[0], myRandomPoint[1]);
 
-            nind = self.GetNearestListIndex(self.nodeList, rnd)
 
-            nearestNode = self.nodeList[nind]
+            myNearestListIndex = self.GetNearestListIndex(self.nodeList, myRandomPoint)
+
+            '''
+            nearestNode = self.nodeList[myNearestListIndex]
             # print("nearestNode: " + str(nearestNode))
+            '''
 
-            if (nearestNode.cost >= self.planDistance):
+            # cost is most likely the result of some cost function
+            # statement below doesn't even really matter
+            '''
+            if nearestNode.cost >= self.planDistance:
                 # self.aboveMaxDistance += 1
                 continue
             # self.belowMaxDistance += 1
+            '''
 
-            newNode = self.steerConstrained(rnd, nind)
-            # newNode = self.steer(rnd, nind) #tests, delete
+            # Create a point
+            newNode = self.steerConstrained(myRandomPoint, myNearestListIndex)
+            # newNode = self.steer(myRandomPoint, myNearestListIndex) #tests, delete
 
+            '''
             # due to angle constraints it is possible that similar node is generated
             if newNode in self.nodeList:
                 # self.doubleNodeCount += 1
                 continue
+            '''
 
+            # If newNode does not collide with any obstacles add it to the node list
             if self.__CollisionCheck(newNode, self.obstacleList):
                 # nearinds = self.find_near_nodes(newNode)
                 # newNode = self.choose_parent(newNode, nearinds)
                 self.nodeList.append(newNode)
                 # self.rewire(newNode, nearinds)
 
-                if (newNode.cost >= self.planDistance):
+                if newNode.cost >= self.planDistance:
                     # print("got a leaf " + str(newNode))
                     self.leafNodes.append(newNode)
             # else:
             #     self.collisionHit += 1
 
             if animation:
-                self.DrawSample(rnd)
+                self.DrawSample(myRandomPoint)
 
             if interactive:
                 key = self.getKey()
@@ -100,44 +119,14 @@ class RRT():
         # print "rrt.Planning(): nodeList length: {0}".format(len(self.nodeList));
         return self.nodeList, self.leafNodes
 
-    def getKey(self):
-      tty.setraw(sys.stdin.fileno())
-      select.select([sys.stdin], [], [], 0)
-      key = sys.stdin.read(1)
-      termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
-      return key
 
-    def choose_parent(self, newNode, nearinds):
-        if len(nearinds) == 0:
-            return newNode
-
-        dlist = []
-        for i in nearinds:
-            dx = newNode.x - self.nodeList[i].x
-            dy = newNode.y - self.nodeList[i].y
-            d = math.sqrt(dx ** 2 + dy ** 2)
-            theta = math.atan2(dy, dx)
-            if self.check_collision_extend(self.nodeList[i], theta, d):
-                dlist.append(self.nodeList[i].cost + d)
-            else:
-                dlist.append(float("inf"))
-
-        mincost = min(dlist)
-        minind = nearinds[dlist.index(mincost)]
-
-        if mincost == float("inf"):
-            print("mincost is inf")
-            return newNode
-
-        newNode.cost = mincost
-        newNode.parent = minind
-
-        return newNode
-
-    def steerConstrained(self, rnd, nind):
+    '''
+    Create a new node that is steering angle constrained
+    '''
+    def steerConstrained(self, aRandomPoint, aNearestListIndex):
         # expand tree
-        nearestNode = self.nodeList[nind]
-        theta = math.atan2(rnd[1] - nearestNode.y, rnd[0] - nearestNode.x)
+        nearestNode = self.nodeList[aNearestListIndex]
+        theta = math.atan2(aRandomPoint[1] - nearestNode.y, aRandomPoint[0] - nearestNode.x)
 
         # print "theta: {0}".format(math.degrees(theta));
         # print "nearestNode.yaw: {0}".format(math.degrees(nearestNode.yaw));
@@ -151,7 +140,7 @@ class RRT():
 
         if angleChange > angle30degree:
             angleChange = self.turnAngle
-        elif angleChange >= -angle30degree:
+        elif angleChange == -angle30degree:
             angleChange = 0
         else:
             angleChange = -self.turnAngle
@@ -163,7 +152,7 @@ class RRT():
         newNode.y += self.expandDis * math.sin(newNode.yaw)
 
         newNode.cost += self.expandDis
-        newNode.parent = nind
+        newNode.parent = aNearestListIndex
 
         # print "newNode: {0}".format(newNode)
         return newNode
@@ -171,18 +160,9 @@ class RRT():
     def pi_2_pi(self, angle):
         return (angle + math.pi) % (2*math.pi) - math.pi
 
-    def steer(self, rnd, nind):
-        # expand tree
-        nearestNode = self.nodeList[nind]
-        theta = math.atan2(rnd[1] - nearestNode.y, rnd[0] - nearestNode.x)
-        newNode = copy.deepcopy(nearestNode)
-        newNode.x += self.expandDis * math.cos(theta)
-        newNode.y += self.expandDis * math.sin(theta)
-
-        newNode.cost += self.expandDis
-        newNode.parent = nind
-        return newNode
-
+    '''
+    If self.rrtTargets is empty, this will generate a random point
+    '''
     def get_random_point(self):
 
         randX = random.uniform(0, self.planDistance)
@@ -195,6 +175,7 @@ class RRT():
         rotatedRnd = [rotatedRnd[0] + self.start.x, rotatedRnd[1] + self.start.y]
         return rotatedRnd
 
+    # Get a random point by producing random values and projecting it on the rrtTargets
     def get_random_point_from_target_list(self):
 
         maxTargetAroundDist = 3
@@ -211,79 +192,39 @@ class RRT():
         # finalRnd = [x + randX, y + randY]
 
         # circle idea
+        # random.uniform - draw samples from a uniform distribution between two points
         randAngle = random.uniform(0, 2 * math.pi)
         randDist = random.uniform(oSize, maxTargetAroundDist)
         finalRnd = [x + randDist * math.cos(randAngle), y + randDist * math.sin(randAngle)]
 
         return finalRnd
 
-    def get_best_last_index(self):
 
-        disglist = [self.calc_dist_to_goal(
-            node.x, node.y) for node in self.nodeList]
-        goalinds = [disglist.index(i) for i in disglist if i <= self.expandDis]
-        #  print(goalinds)
+    # Find the distance of all the nodes in relations to the random point
+    # return the nearest point to the random point
+    def GetNearestListIndex(self, nodeList, rnd):
+        dlist = [(node.x - rnd[0]) ** 2 + (node.y - rnd[1]) ** 2 for node in nodeList]
+        minind = dlist.index(min(dlist))
+        return minind
 
-        if len(goalinds) == 0:
-            return None
+    '''
+    Check if aNode collides with cones in aObstacleList
+    '''
+    def __CollisionCheck(self, aNode, aObstacleList):
+        for (ox, oy, size) in aObstacleList:
+            dx = ox - aNode.x
+            dy = oy - aNode.y
+            d = dx * dx + dy * dy
+            if d <= size ** 2:
+                return False  # collision
+        return True  # safe
 
-        mincost = min([self.nodeList[i].cost for i in goalinds])
-        for i in goalinds:
-            if self.nodeList[i].cost == mincost:
-                return i
-
-        return None
-
-    def gen_final_course(self, goalind):
-        path = [[self.end.x, self.end.y]]
-        while self.nodeList[goalind].parent is not None:
-            node = self.nodeList[goalind]
-            path.append([node.x, node.y])
-            goalind = node.parent
-        path.append([self.start.x, self.start.y])
-        return path
-
-    def calc_dist_to_goal(self, x, y):
-        return np.linalg.norm([x - self.end.x, y - self.end.y])
-
-    def find_near_nodes(self, newNode):
-        nnode = len(self.nodeList)
-        # r = 50.0 * math.sqrt((math.log(nnode) / nnode))
-        r = self.expandDis * 3.0
-        dlist = [(node.x - newNode.x) ** 2 +
-                 (node.y - newNode.y) ** 2 for node in self.nodeList]
-        nearinds = [dlist.index(i) for i in dlist if i <= r ** 2]
-        # print "find_near_nodes, size: {0}".format(len(nearinds))
-        return nearinds
-
-    def rewire(self, newNode, nearinds):
-        nnode = len(self.nodeList)
-        for i in nearinds:
-            nearNode = self.nodeList[i]
-
-            dx = newNode.x - nearNode.x
-            dy = newNode.y - nearNode.y
-            d = math.sqrt(dx ** 2 + dy ** 2)
-
-            scost = newNode.cost + d
-
-            if nearNode.cost > scost:
-                theta = math.atan2(dy, dx)
-                if self.check_collision_extend(nearNode, theta, d):
-                    nearNode.parent = nnode - 1
-                    nearNode.cost = scost
-
-    def check_collision_extend(self, nearNode, theta, d):
-
-        tmpNode = copy.deepcopy(nearNode)
-
-        for i in range(int(d / self.expandDis)):
-            tmpNode.x += self.expandDis * math.cos(theta)
-            tmpNode.y += self.expandDis * math.sin(theta)
-            if not self.__CollisionCheck(tmpNode, self.obstacleList):
-                return False
-
-        return True
+    def getKey(self):
+        tty.setraw(sys.stdin.fileno())
+        select.select([sys.stdin], [], [], 0)
+        key = sys.stdin.read(1)
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+        return key
 
     def DrawSample(self, rnd=None):
 
@@ -294,7 +235,7 @@ class RRT():
         for node in self.nodeList:
             if node.parent is not None:
                 plt.plot([node.x, self.nodeList[node.parent].x], [
-                         node.y, self.nodeList[node.parent].y], "-g")
+                    node.y, self.nodeList[node.parent].y], "-g")
 
         # draw obstacles
         axes = plt.gca()
@@ -325,7 +266,7 @@ class RRT():
         for node in self.nodeList:
             if node.parent is not None:
                 plt.plot([node.x, self.nodeList[node.parent].x], [
-                         node.y, self.nodeList[node.parent].y], "-g")
+                    node.y, self.nodeList[node.parent].y], "-g")
 
         # plt.plot(self.start.x, self.start.y, "xr")
         # plt.plot(self.end.x, self.end.y, "xr")
@@ -334,21 +275,132 @@ class RRT():
         plt.grid(True)
         plt.pause(0.01)
 
-    def GetNearestListIndex(self, nodeList, rnd):
-        dlist = [(node.x - rnd[0]) ** 2 + (node.y - rnd[1]) ** 2 for node in nodeList]
-        minind = dlist.index(min(dlist))
-        return minind
+    '''
+    def get_best_last_index(self):
 
-    def __CollisionCheck(self, node, obstacleList):
-        for (ox, oy, size) in obstacleList:
-            dx = ox - node.x
-            dy = oy - node.y
-            d = dx * dx + dy * dy
-            if d <= size ** 2:
-                return False  # collision
-        return True  # safe
+        disglist = [self.calc_dist_to_goal(
+            node.x, node.y) for node in self.nodeList]
+        goalinds = [disglist.index(i) for i in disglist if i <= self.expandDis]
+        #  print(goalinds)
 
-class Node():
+        if len(goalinds) == 0:
+            return None
+
+        mincost = min([self.nodeList[i].cost for i in goalinds])
+        for i in goalinds:
+            if self.nodeList[i].cost == mincost:
+                return i
+
+        return None
+    '''
+
+    # Not used
+    '''
+    def gen_final_course(self, goalind):
+        path = [[self.end.x, self.end.y]]
+        while self.nodeList[goalind].parent is not None:
+            node = self.nodeList[goalind]
+            path.append([node.x, node.y])
+            goalind = node.parent
+        path.append([self.start.x, self.start.y])
+        return path
+    '''
+
+    '''
+    def calc_dist_to_goal(self, x, y):
+        return np.linalg.norm([x - self.end.x, y - self.end.y])
+    '''
+
+    '''
+    def find_near_nodes(self, newNode):
+        nnode = len(self.nodeList)
+        # r = 50.0 * math.sqrt((math.log(nnode) / nnode))
+        r = self.expandDis * 3.0
+        dlist = [(node.x - newNode.x) ** 2 +
+                 (node.y - newNode.y) ** 2 for node in self.nodeList]
+        nearinds = [dlist.index(i) for i in dlist if i <= r ** 2]
+        # print "find_near_nodes, size: {0}".format(len(nearinds))
+        return nearinds
+    '''
+
+    '''
+    def rewire(self, newNode, nearinds):
+        nnode = len(self.nodeList)
+        for i in nearinds:
+            nearNode = self.nodeList[i]
+
+            dx = newNode.x - nearNode.x
+            dy = newNode.y - nearNode.y
+            d = math.sqrt(dx ** 2 + dy ** 2)
+
+            scost = newNode.cost + d
+
+            if nearNode.cost > scost:
+                theta = math.atan2(dy, dx)
+                if self.check_collision_extend(nearNode, theta, d):
+                    nearNode.parent = nnode - 1
+                    nearNode.cost = scost
+    '''
+
+    '''
+    def check_collision_extend(self, nearNode, theta, d):
+
+        tmpNode = copy.deepcopy(nearNode)
+
+        for i in range(int(d / self.expandDis)):
+            tmpNode.x += self.expandDis * math.cos(theta)
+            tmpNode.y += self.expandDis * math.sin(theta)
+            if not self.__CollisionCheck(tmpNode, self.obstacleList):
+                return False
+
+        return True
+    '''
+
+    # Not used
+    '''
+    def choose_parent(self, newNode, nearinds):
+        if len(nearinds) == 0:
+            return newNode
+
+        dlist = []
+        for i in nearinds:
+            dx = newNode.x - self.nodeList[i].x
+            dy = newNode.y - self.nodeList[i].y
+            d = math.sqrt(dx ** 2 + dy ** 2)
+            theta = math.atan2(dy, dx)
+            if self.check_collision_extend(self.nodeList[i], theta, d):
+                dlist.append(self.nodeList[i].cost + d)
+            else:
+                dlist.append(float("inf"))
+
+        mincost = min(dlist)
+        minind = nearinds[dlist.index(mincost)]
+
+        if mincost == float("inf"):
+            print("mincost is inf")
+            return newNode
+
+        newNode.cost = mincost
+        newNode.parent = minind
+
+        return newNode
+    '''
+
+    '''
+    def steer(self, rnd, nind):
+        # expand tree
+        nearestNode = self.nodeList[nind]
+        theta = math.atan2(rnd[1] - nearestNode.y, rnd[0] - nearestNode.x)
+        newNode = copy.deepcopy(nearestNode)
+        newNode.x += self.expandDis * math.cos(theta)
+        newNode.y += self.expandDis * math.sin(theta)
+
+        newNode.cost += self.expandDis
+        newNode.parent = nind
+        return newNode
+    '''
+
+class Node:
     """
     RRT Node
     """
@@ -400,6 +452,7 @@ def main():
     rrtConeTargets = []
 
     for o in obstacleList:
+        # Add cone coordinate into rttConeTargets if they are certain distance away
         coneDist = math.sqrt((start[0] - o[0]) ** 2 + (start[1] - o[1]) ** 2)
 
         if coneDist > 10 and coneDist < 15:

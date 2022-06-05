@@ -126,6 +126,9 @@ class MaRRTPathPlanNode:
     def mapCallback(self, track):
         self.map = track.cones
 
+    '''
+    Main function that gets called
+    '''
     def sampleTree(self):
         # sampleTreeStartTime = time.time()
         if self.loopClosure and len(self.savedWaypoints) > 0:
@@ -169,7 +172,8 @@ class MaRRTPathPlanNode:
 
         # rrt planning
         # planningStartTime = time.time()
-        rrt = ma_rrt.RRT(start, planDistance, obstacleList=coneObstacleList, expandDis=expandDistance, turnAngle=expandAngle, maxIter=iterationNumber, rrtTargets = rrtConeTargets)
+        rrt = ma_rrt.RRT(start, planDistance, obstacleList=coneObstacleList, expandDis=expandDistance,
+                         turnAngle=expandAngle, maxIter=iterationNumber, rrtTargets = rrtConeTargets)
         nodeList, leafNodes = rrt.Planning()
         # print "rrt.Planning(): {0} ms".format((time.time() - planningStartTime) * 1000);
 
@@ -582,7 +586,7 @@ class MaRRTPathPlanNode:
             return
 
         coneDistLimit = 4.0
-        coneDistanceLimitSq = coneDistLimit * coneDistLimit;
+        coneDistanceLimitSq = coneDistLimit * coneDistLimit
 
         bothSidesImproveFactor = 3
         minAcceptableBranchRating = 80 # fits good fsg18
@@ -819,6 +823,7 @@ class MaRRTPathPlanNode:
     def getHeadingVector(self):
         headingVector = [1.0, 0]
         carRotMat = np.array([[math.cos(self.carPosYaw), -math.sin(self.carPosYaw)], [math.sin(self.carPosYaw), math.cos(self.carPosYaw)]])
+        # numpy.dot - dot product of two arrays
         headingVector = np.dot(carRotMat, headingVector)
         return headingVector
 
@@ -830,7 +835,7 @@ class MaRRTPathPlanNode:
                 coneList.append(cone)
         return coneList
 
-class Edge():
+class Edge:
     def __init__(self, x1, y1, x2, y2):
         self.x1 = x1
         self.y1 = y1
