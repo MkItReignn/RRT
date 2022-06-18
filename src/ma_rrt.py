@@ -15,6 +15,8 @@ import time
 
 import sys, select, termios, tty
 
+indexCheck = False
+
 class RRT:
     """
     Class for RRT Planning
@@ -28,7 +30,8 @@ class RRT:
     
     rttTargets are cones that are a certain distance away from the starting point
     '''
-    def __init__(self, start, planDistance, obstacleList, expandDis=0.5, turnAngle=30, maxIter=1000, rrtTargets = None):
+    def __init__(self, start, planDistance, obstacleList, expandDis=0.5, turnAngle=30,
+                 maxIter=3100, rrtTargets = None, aUniformRandomGeneratorSeed = None, aRandomNumberGeneratorSeed = None):
 
         self.start = Node(start[0], start[1], start[2])
         self.startYaw = start[2]
@@ -44,24 +47,51 @@ class RRT:
         self.obstacleList = obstacleList
         self.rrtTargets = rrtTargets
 
+        # Randomiser
+        self.theRandomUniformNumberGenerator = np.random.RandomState(aUniformRandomGeneratorSeed)
+        self.theRandomNumberGenerator = np.random.RandomState(aRandomNumberGeneratorSeed)
+
+        self.i = 0
+
     def Planning(self, animation=False, interactive=False):
         self.nodeList = [self.start]
         self.leafNodes = []
 
         for i in range(self.maxIter):
+            self.i = i
             myRandomPoint = self.get_random_point_from_target_list()
+            # print(f"{myRandomPoint[0]:.16f} {myRandomPoint[1]:.16f}")
 
             myNearestListIndex = self.GetNearestListIndex(self.nodeList, myRandomPoint)
+            # print(myNearestListIndex)
+
+            if i == 310 and indexCheck:
+                print(f"{myRandomPoint[0]:.16f} {myRandomPoint[1]:.16f}")
+                print(f"{myNearestListIndex}")
+                print()
+                for node in self.nodeList:
+                    print(f"{node.x:.16f} {node.y:.16f}")
 
             # Create a point
             newNode = self.steerConstrained(myRandomPoint, myNearestListIndex)
+            # print(f"{newNode.x:.16f} {newNode.y:.16f}") # when i = 310
+            if i == 310 and indexCheck:
+                print()
+                print(f"{newNode.x:.16f} {newNode.y:.16f}")
+            # print(newNode)
 
             # If newNode does not collide with any obstacles add it to the node list
+            # check node lives outside the obstacles
             if self.__CollisionCheck(newNode, self.obstacleList):
                 self.nodeList.append(newNode)
 
                 if newNode.cost >= self.planDistance:
                     self.leafNodes.append(newNode)
+
+            if len(self.nodeList) == 276:
+                # print(i)
+                # print(f"{newNode.x:.16f} {newNode.y:.16f}")
+                None
 
             if animation:
                 self.DrawSample(myRandomPoint)
@@ -82,23 +112,36 @@ class RRT:
         # expand tree
         nearestNode = self.nodeList[aNearestListIndex]
         theta = math.atan2(aRandomPoint[1] - nearestNode.y, aRandomPoint[0] - nearestNode.x)
+        # print("%.16f" % theta)
 
         # dynamic constraints
+        # print("%.16f" % (theta - nearestNode.yaw))
         angleChange = self.pi_2_pi(theta - nearestNode.yaw)
+        # print("%.16f" % angleChange)
 
         angle30degree = math.radians(30)
 
+        if self.i == 310 and indexCheck:
+            print()
+            print(f"{theta:.16f} {angleChange:.16f}")
+
         if angleChange > angle30degree:
             angleChange = self.turnAngle
-        elif angleChange == -angle30degree:
+        elif angleChange >= -angle30degree:
             angleChange = 0
         else:
             angleChange = -self.turnAngle
+
+        # print("%.16f" % angleChange)
 
         newNode = copy.deepcopy(nearestNode)
         newNode.yaw += angleChange
         newNode.x += self.expandDis * math.cos(newNode.yaw)
         newNode.y += self.expandDis * math.sin(newNode.yaw)
+        if self.i == 310 and indexCheck:
+            print(f"newNode.yaw = {newNode.yaw}")
+            print(f"math.sin(newNode.yaw) = {math.sin(newNode.yaw):.16f}")
+            None
 
         newNode.cost += self.expandDis
         newNode.parent = aNearestListIndex
@@ -106,18 +149,28 @@ class RRT:
         return newNode
 
     def pi_2_pi(self, angle):
-        return (angle + math.pi) % (2*math.pi) - math.pi
+        # return (angle + math.pi) % (2*math.pi) - math.pi
+        return math.fmod((angle + math.pi), (2*math.pi)) - math.pi
 
     '''
     If self.rrtTargets is empty, this will generate a random point
     '''
     def get_random_point(self):
 
-        randX = random.uniform(0, self.planDistance)
-        randY = random.uniform(-self.planDistance, self.planDistance)
+        # Replacing random.uniform with np.random.uniform()
+        # randX = random.uniform(0, self.planDistance)
+        # randY = random.uniform(-self.planDistance, self.planDistance)
+
+        # randX = np.random.uniform(0, self.planDistance)
+        # randY = np.random.uniform(-self.planDistance, self.planDistance)
+        randX = self.theRandomUniformNumberGenerator.uniform(0, self.planDistance)
+        randY = self.theRandomUniformNumberGenerator.uniform(-self.planDistance, self.planDistance)
         rnd = [randX, randY]
 
-        car_rot_mat = np.array([[math.cos(self.startYaw), -math.sin(self.startYaw)], [math.sin(self.startYaw), math.cos(self.startYaw)]])
+        car_rot_mat = np.array([
+            [math.cos(self.startYaw), -math.sin(self.startYaw)],
+            [math.sin(self.startYaw),  math.cos(self.startYaw)]
+        ])
         rotatedRnd = np.dot(car_rot_mat, rnd)
 
         rotatedRnd = [rotatedRnd[0] + self.start.x, rotatedRnd[1] + self.start.y]
@@ -131,22 +184,43 @@ class RRT:
         if not self.rrtTargets:
             return self.get_random_point()
 
-        targetId = np.random.randint(len(self.rrtTargets))
+        # targetId = np.random.randint(len(self.rrtTargets))
+        targetId = self.theRandomNumberGenerator.randint(len(self.rrtTargets)) # len == 2?
+        # print(f"{targetId} {len(self.rrtTargets)}")
+        # print(targetId)
         x, y, oSize = self.rrtTargets[targetId]
 
         # circle idea
-        randAngle = random.uniform(0, 2 * math.pi)
-        randDist = random.uniform(oSize, maxTargetAroundDist)
-        finalRnd = [x + randDist * math.cos(randAngle), y + randDist * math.sin(randAngle)]
+        # Replacing random.uniform with np.random.uniform()
+        # randAngle = random.uniform(0, 2 * math.pi)
+        # randDist = random.uniform(oSize, maxTargetAroundDist)
 
+        # randAngle = np.random.uniform(0, 2 * math.pi)
+        # randDist = np.random.uniform(oSize, maxTargetAroundDist)
+        myRandomAngle = self.theRandomUniformNumberGenerator.uniform(0, 2 * math.pi)
+        myRandomDistance = self.theRandomUniformNumberGenerator.uniform(oSize, maxTargetAroundDist)
+        finalRnd = [x + myRandomDistance * math.cos(myRandomAngle), y + myRandomDistance * math.sin(myRandomAngle)]
+        # print("%.16f " % math.cos(myRandomAngle), end='')
+        # print("%.16f" % math.sin(myRandomAngle))
+        # print("%.16f " % finalRnd[0], end='')
+        # print("%.16f" % finalRnd[1])
         return finalRnd
 
 
     # Find the distance of all the nodes in relations to the random point
     # return the nearest point to the random point
     def GetNearestListIndex(self, nodeList, rnd):
-        dlist = [(node.x - rnd[0]) ** 2 + (node.y - rnd[1]) ** 2 for node in nodeList]
+        dlist = []
+        for node in nodeList:
+            myDistance = (node.x - rnd[0]) ** 2 + (node.y - rnd[1]) ** 2
+            dlist.append(myDistance)
+            if self.i == 310 and indexCheck:
+                print(f"{node.x:.16f} {rnd[0]:.16f}")
+                print(f"{node.y:.16f} {rnd[1]:.16f}")
+                print("%.16f" % myDistance)
+                None
         minind = dlist.index(min(dlist))
+        # self.i += 1
         return minind
 
     '''
@@ -165,7 +239,7 @@ class RRT:
         tty.setraw(sys.stdin.fileno())
         select.select([sys.stdin], [], [], 0)
         key = sys.stdin.read(1)
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN)
         return key
 
     def DrawSample(self, rnd=None):
@@ -226,7 +300,8 @@ class Node:
         self.parent = None
 
     def __str__(self):
-        return str(round(self.x, 2)) + "," + str(round(self.y,2)) + "," + str(math.degrees(self.yaw)) + "," + str(self.cost)
+        # return f"{self.x:.16f} {self.y:.16f} {math.degrees(self.yaw):.16f} {self.cost:.16f}"
+        return f"{self.x:.16f} {self.y:.16f} {self.yaw:.16f} {self.cost:.16f}"
 
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y and self.yaw == other.yaw and self.cost == other.cost
@@ -234,9 +309,18 @@ class Node:
     def __repr__(self):
         return str(self)
 
+def printNodes(aNodeList, printIndex = False):
+    i = 0
+    for myNode in aNodeList:
+        if printIndex:
+            print(f"{i}: {myNode}")
+        else:
+            print(f"{myNode}")
 
-def main():
-    print("Start rrt planning!")
+        i += 1
+
+if __name__ == '__main__':
+    # print("Start rrt planning!")
 
     # ====Search Path with RRT====
     radius = 1
@@ -253,7 +337,7 @@ def main():
         (12, 4, radius),
         # (16, -2, radius),
         # (15, 5, radius),
-        (20, -1, radius),
+        (20, 310, radius),
         (18.5, 6.5, radius),
         (24, 1, radius),
         (22, 8, radius)
@@ -268,20 +352,30 @@ def main():
         # Add cone coordinate into rttConeTargets if they are certain distance away
         coneDist = math.sqrt((start[0] - o[0]) ** 2 + (start[1] - o[1]) ** 2)
 
-        if coneDist > 10 and coneDist < 15:
+        if 10 < coneDist < 15:
             rrtConeTargets.append((o[0], o[1], radius))
+            # print(f"{o[0]} {o[1]}")
 
     startTime = time.time()
 
     # Set Initial parameters
-    rrt = RRT(start, planDistance, obstacleList=obstacleList, expandDis=1, maxIter=iterationNumber, rrtTargets = rrtConeTargets)
-    rrt.Planning(True, True)
+    rrt = RRT(start, planDistance, obstacleList=obstacleList, expandDis=1, maxIter=iterationNumber,
+              rrtTargets = rrtConeTargets, aUniformRandomGeneratorSeed=100, aRandomNumberGeneratorSeed=200)
+    myReturnVal = rrt.Planning(False, False)
     # rrt.Planning()
+    # print(myReturnVal)
+    # print(f"Node List:")
+    printNodes(myReturnVal[1])
 
-    print "rrt.Planning(): {0} ms".format((time.time() - startTime) * 1000);
-    print "nodesNumber/iteration: {0}/{1}".format(len(rrt.nodeList), iterationNumber)
+    # print(f"Leaf Nodes:")
+    # print(myReturnVal[1])
+    # printNodes(myReturnVal[1])
 
-    show_animation = True
+    # print("rrt.Planning(): {0} ms".format((time.time() - startTime) * 3100))
+    # print("nodesNumber/iteration: {0}/{1}".format(len(rrt.nodeList), iterationNumber))
+
+    show_animation = False
+    # show_animation = False
 
     if show_animation:
         rrt.DrawGraph()
@@ -291,9 +385,9 @@ def main():
         plt.show()
 
 
-if __name__ == '__main__':
-    settings = termios.tcgetattr(sys.stdin)
+# if __name__ == '__main__':
+    # settings = termios.tcgetattr(sys.stdin)
 
-    main()
+    # main()
 
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+    # termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
